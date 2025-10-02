@@ -1,13 +1,109 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
-    <title>Serverless Web Application</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastAPI SSE Task Progress</title>
+    <style>
+        body { font-family: sans-serif; padding: 2em; }
+        #progress-container { margin-top: 20px; border: 1px solid #ccc; padding: 15px; border-radius: 5px; }
+        .progress-bar { width: 100%; background-color: #f3f3f3; border-radius: 5px; }
+        .progress-bar-inner { width: 0%; height: 30px; background-color: #4caf50; text-align: center; line-height: 30px; color: white; border-radius: 5px; transition: width 0.5s; }
+        #log { margin-top: 10px; font-size: 0.9em; color: #555; }
+    </style>
 </head>
 <body>
+    <h1>長時間タスクのリアルタイム進捗表示</h1>
+    
+    <form id="task-form">
+        <label for="prompt">タスクの説明:</label>
+        <input type="text" id="prompt" name="prompt" value="重要なデータのバッチ処理" required>
+        <button type="submit" id="start-btn">タスクを開始</button>
+    </form>
 
-Hello World!!
+    <div id="progress-container" style="display: none;">
+        <h3>タスク進捗</h3>
+        <p>タスクID: <code id="task-id"></code></p>
+        <div class="progress-bar">
+            <div id="progress-bar-inner" class="progress-bar-inner">0%</div>
+        </div>
+        <p id="log">待機中...</p>
+    </div>
 
-<script src="/static/script.js"></script>
+    <script>
+        const form = document.getElementById('task-form');
+        const startBtn = document.getElementById('start-btn');
+        const progressContainer = document.getElementById('progress-container');
+        const taskIdElem = document.getElementById('task-id');
+        const progressBarInner = document.getElementById('progress-bar-inner');
+        const logElem = document.getElementById('log');
 
+        let eventSource = null;
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            startBtn.disabled = true;
+            startBtn.textContent = 'タスク開始中...';
+
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            try {
+                const response = await fetch('/start-task', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ prompt: document.getElementById('prompt').value }),
+                });
+
+                const data = await response.json();
+                const taskId = data.task_id;
+                
+                taskIdElem.textContent = taskId;
+                progressContainer.style.display = 'block';
+                updateProgress(0, '接続中...');
+
+                // SSE接続を開始
+                startListening(taskId);
+
+            } catch (error) {
+                console.error('Error starting task:', error);
+                logElem.textContent = 'タスクの開始に失敗しました。';
+            } finally {
+                 startBtn.disabled = false;
+                 startBtn.textContent = 'タスクを開始';
+            }
+        });
+
+        function startListening(taskId) {
+            eventSource = new EventSource(`/progress/${taskId}`);
+
+            eventSource.addEventListener('update', (event) => {
+                const data = JSON.parse(event.data);
+                console.log('Update:', data);
+                updateProgress(data.progress, `${data.status}: ${data.message}`);
+            });
+
+            eventSource.addEventListener('end', (event) => {
+                console.log('Stream ended');
+                eventSource.close();
+            });
+
+            eventSource.onerror = (error) => {
+                console.error('EventSource failed:', error);
+                logElem.textContent = '接続エラーが発生しました。';
+                eventSource.close();
+            };
+        }
+
+        function updateProgress(progress, message) {
+            progressBarInner.style.width = `${progress}%`;
+            progressBarInner.textContent = `${progress}%`;
+            logElem.textContent = message;
+        }
+
+    </script>
 </body>
 </html>
