@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>動き検出 (スマホ対応)</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            background-color: #1a1a1a;
+            color: #fff;
+        }
+        h1 {
+            font-size: 1.2rem;
+            text-align: center;
+            margin: 15px 0;
+        }
+        /* コンテナ全体を画面にフィットさせる */
+        .container {
+            display: flex;
+            /* 画面が狭いときは縦に並べる */
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        .canvas-wrapper {
+            /* canvasの幅を画面幅に合わせる */
+            width: 100%;
+            max-width: 480px; /* PCなどでは大きくなりすぎないように */
+        }
+        canvas {
+            /* 親要素の幅に合わせて伸縮する */
+            width: 100%;
+            height: auto;
+            display: block;
+            border-radius: 8px;
+            background-color: #000;
+        }
+        .label { 
+            text-align: center; 
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+        /* video要素はデータ取得用なので非表示 */
+        video { display: none; }
+    </style>
+</head>
+<body>
+    <h1>Motion Detection</h1>
+    <div class="container">
+        <div class="canvas-wrapper">
+            <p class="label">カメラ映像</p>
+            <canvas id="liveCanvas"></canvas>
+        </div>
+        <div class="canvas-wrapper">
+            <p class="label">動きを検出した部分</p>
+            <canvas id="diffCanvas"></canvas>
+        </div>
+    </div>
+    <video id="video" autoplay playsinline></video>
+
+    <script>
+        // --- 設定 (モバイル向けに解像度を調整) ---
+        const WIDTH = 480; // 横幅
+        const HEIGHT = 360; // 高さ
+        const THRESHOLD = 35; // 動き検出の感度
+
+        const video = document.getElementById('video');
+        const liveCanvas = document.getElementById('liveCanvas');
+        const liveContext = liveCanvas.getContext('2d');
+        const diffCanvas = document.getElementById('diffCanvas');
+        const diffContext = diffCanvas.getContext('2d');
+
+        liveCanvas.width = diffCanvas.width = WIDTH;
+        liveCanvas.height = diffCanvas.height = HEIGHT;
+        
+        let lastImageData = null;
+
+        // --- Webカメラの起動 (スマホの背面カメラを指定) ---
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    // facingModeでカメラを指定
+                    video: { 
+                        width: WIDTH, 
+                        height: HEIGHT,
+                        // 'environment'は背面カメラ, 'user'は前面カメラ
+                        facingMode: { ideal: 'environment' } 
+                    },
+                    audio: false
+                });
+                video.srcObject = stream;
+            } catch (err) {
+                console.error("カメラエラー:", err);
+                alert("カメラの起動に失敗しました。カメラのアクセスを許可してください。");
+            }
+        }
+
+        // --- メインの処理ループ (変更なし) ---
+        function tick() {
+            liveContext.drawImage(video, 0, 0, WIDTH, HEIGHT);
+            const currentImageData = liveContext.getImageData(0, 0, WIDTH, HEIGHT);
+            
+            if (lastImageData) {
+                const diffImageData = diffContext.createImageData(WIDTH, HEIGHT);
+                for (let i = 0; i < currentImageData.data.length; i += 4) {
+                    const r1 = lastImageData.data[i], g1 = lastImageData.data[i + 1], b1 = lastImageData.data[i + 2];
+                    const r2 = currentImageData.data[i], g2 = currentImageData.data[i + 1], b2 = currentImageData.data[i + 2];
+                    let diff = Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2);
+                    if (diff > THRESHOLD) {
+                        diffImageData.data[i] = 255;
+                        diffImageData.data[i + 1] = 255;
+                        diffImageData.data[i + 2] = 255;
+                        diffImageData.data[i + 3] = 255;
+                    }
+                }
+                diffContext.putImageData(diffImageData, 0, 0);
+            }
+            lastImageData = currentImageData;
+            requestAnimationFrame(tick);
+        }
+
+        // --- 実行開始 ---
+        setupCamera().then(() => {
+            video.addEventListener('playing', () => {
+                tick();
+            });
+        });
+    </script>
+</body>
+</html>

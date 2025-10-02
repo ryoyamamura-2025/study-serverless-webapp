@@ -27,6 +27,10 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 async def root():
     return FileResponse('static/index.html')
 
+@app.get("/video", include_in_schema=False)
+async def get_video_analysis_page():
+    return FileResponse('static/video_analysis.html')
+
 @app.get("/mock-endpoint")
 async def mock_endpoint():
     return {"message": "This is a mock endpoint."}
