@@ -5,6 +5,34 @@
 本アプリケーションは、バックエンドで時間のかかる非同期処理を実行するウェブアプリケーションのモックです。
 Google Cloudのサーバーレスサービスである **Cloud Run**, **Cloud Tasks**, **Firestore** を利用して、スケーラブルな構成を学習するために作成しました。
 
+### アーキテクチャ概要
+
+```mermaid
+graph TD
+    subgraph "User"
+        Client[Browser]
+    end
+
+    subgraph "Google Cloud"
+        subgraph "Cloud Run Service"
+            CR_API[FastAPI App<br>/start-task<br>/progress]
+            CR_Worker[FastAPI App<br>/run-task]
+        end
+
+        CloudTasks[Cloud Tasks]
+        Firestore[Firestore Database]
+    end
+
+    Client -- "1. POST /start-task" --> CR_API
+    CR_API -- "2. Create Task Document" --> Firestore
+    CR_API -- "3. Create Task" --> CloudTasks
+    Client -- "4. GET /progress/{task_id} (SSE)" --> CR_API
+    CloudTasks -- "5. POST /run-task" --> CR_Worker
+    CR_Worker -- "6. Update Task Status & Progress" --> Firestore
+    CR_API -- "7. Read Task Status" --> Firestore
+    CR_API -- "8. Stream Progress Update" --> Client
+```
+
 ### 主な特徴
 
 - **非同期タスク処理**: 時間のかかる処理（動画分析やデータ処理などを想定）をCloud Tasksにキューイングし、Cloud Runの別インスタンスで非同期に実行します。
